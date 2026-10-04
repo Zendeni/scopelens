@@ -4,7 +4,7 @@
 
 ScopeLens is an offline analysis tool for existing recon workspaces, ZIP archives, and individual supported artifacts. It imports evidence, organizes assets and services, identifies defensive configuration concerns, and produces reports you can inspect or compare over time. It works with the workspace layout created by [htb-init](https://github.com/Zendeni/htb-init) and also accepts supported artifacts in other directory layouts.
 
-ScopeLens 0.2.0 · Python 3.10+ · Linux, macOS, Windows · No runtime dependencies · No network requests
+ScopeLens 0.3.0 · Python 3.10+ · Linux, macOS, Windows · No runtime dependencies · No network requests
 
 ## Try it
 
@@ -189,6 +189,25 @@ Redaction is best effort. Paths, hostnames, package names, and other assessment 
 Raw htb-init archives preserve the original collected material and may contain secrets. The `reports/` snapshots are separate, excluded from evidence imports, and not automatically included in those archives. For the earlier htb-init workflow, see its [legacy documentation](https://github.com/Zendeni/htb-init/blob/main/docs/legacy-workflow.md).
 
 ## Development
+
+The command line and workspace review use the same analysis service. Python integrations can use it directly without constructing command arguments or capturing console output:
+
+```python
+from pathlib import Path
+from scopelens.service import AnalysisRequest, run_analysis
+
+result = run_analysis(AnalysisRequest(
+    source=Path("examples/demo"),
+    output=Path("api-review"),  # Must not already exist.
+    scope=Path("examples/scope.json"),
+    fail_on="medium",
+))
+print(result.report["summary"])
+print(result.paths)
+print(result.exit_code)
+```
+
+The service saves the requested reports and returns their paths, report data, and the same analysis status as the CLI. Invalid inputs raise exceptions for the caller to handle. See [architecture](docs/architecture.md#code-map) for module responsibilities and [changes](CHANGELOG.md) for release notes.
 
 No external test framework is required:
 

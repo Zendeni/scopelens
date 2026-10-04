@@ -3,66 +3,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 import platform
-import shutil
 import sys
-import tempfile
 
 from . import __version__
-from .engine import RULES, analyze, compare_reports, normalize_host, validate_scope
-from .inputs import is_link
+from .engine import RULES, compare_reports, normalize_host, validate_scope
 from .model import SEVERITIES, redact
-from .reports import render_html, render_json, render_markdown
-
-
-def read_json(path: Path, limit: int = 32 * 1024 * 1024):
-    if not path.is_file() or is_link(path):
-        raise ValueError(f"Expected a regular JSON file: {path}")
-    with path.open("rb") as stream:
-        raw = stream.read(limit + 1)
-    if len(raw) > limit:
-        raise ValueError(f"JSON file exceeds {limit} bytes")
-    try:
-        return json.loads(raw.decode("utf-8-sig"))
-    except (UnicodeError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Invalid JSON: {path.name}") from exc
-
-
-def publish_directory(destination: Path, files: dict[str, str]) -> None:
-    destination = destination.expanduser().absolute()
-    if destination.exists() or destination.is_symlink():
-        raise ValueError(f"Output already exists; choose a new directory: {destination}")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    stage = Path(tempfile.mkdtemp(prefix=".scopelens-", dir=destination.parent))
-    try:
-        try:
-            stage.chmod(0o700)
-        except OSError:
-            pass
-        for name, content in files.items():
-            path = stage / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8", newline="\n")
-            try:
-                path.chmod(0o600)
-            except OSError:
-                pass
-        # Claim the destination without ever replacing an existing directory.
-        destination.mkdir()
-        try:
-            for child in stage.iterdir():
-                shutil.move(str(child), str(destination / child.name))
-            try:
-                destination.chmod(0o700)
-            except OSError:
-                pass
-        except Exception:
-            # Preserve partial output for inspection; do not delete user data.
-            raise
-    finally:
-        shutil.rmtree(stage)
+from .service import AnalysisRequest, FORMATS, format_analysis_summary, run_analysis
+from .storage import publish_directory, read_json
 
 
 def parser() -> argparse.ArgumentParser:
@@ -76,7 +25,7 @@ def parser() -> argparse.ArgumentParser:
     analysis.add_argument("--scope", type=Path, help="JSON include/exclude list of exact hosts, IPs, or CIDRs")
     analysis.add_argument("--baseline", type=Path, help="Previous ScopeLens report.json")
     analysis.add_argument("--fail-on", choices=SEVERITIES, help="Return exit 1 if a finding meets this severity")
-    analysis.add_argument("--format", choices=("all", "json", "html", "markdown"), default="all")
+    analysis.add_argument("--format", choices=FORMATS, default="all")
     initialize = commands.add_parser("init", help="Create an evidence workspace with scope and notes")
     initialize.add_argument("path", type=Path)
     initialize.add_argument("--name", required=True)
@@ -92,7 +41,7 @@ def parser() -> argparse.ArgumentParser:
     review.add_argument("--name", default="", help="Assessment name")
     review.add_argument("--baseline", help="Prior report.json or 'latest' for the newest valid workspace snapshot")
     review.add_argument("--fail-on", choices=SEVERITIES)
-    review.add_argument("--format", choices=("all", "json", "html", "markdown"), default="all")
+    review.add_argument("--format", choices=FORMATS, default="all")
     inspect = commands.add_parser("inspect", help="Read workspace targets, scope, artifact counts, and prior reports")
     inspect.add_argument("path", type=Path)
     inspect.add_argument("--json", action="store_true", help="Machine-readable inventory")
@@ -160,23 +109,11 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(text, end="")
             return 0
-        if args.output.exists():
-            raise ValueError(f"Output already exists; choose a new directory: {args.output}")
-        scope = read_json(args.scope, 1024 * 1024) if args.scope else None
-        baseline = read_json(args.baseline) if args.baseline else None
-        report = analyze(args.input.expanduser().absolute(), args.name, scope, baseline, args.output)
-        renderers = {"json": ("report.json", render_json), "html": ("report.html", render_html), "markdown": ("report.md", render_markdown)}
-        files = {filename: render(report) for key, (filename, render) in renderers.items() if args.format in ("all", key)}
-        publish_directory(args.output, files)
-        summary = report["summary"]
-        print(f"ScopeLens | {summary['assets']} assets | {summary['services']} services | {summary['findings']} review findings\nCoverage: {summary['files_parsed']}/{summary['files_total']} artifacts parsed | {len(report['warnings'])} diagnostics\nReports: {args.output.absolute()}")
-        for warning in report["warnings"][:8]:
-            print(f"  {warning['code']}: {warning.get('path', '')} {warning['message']}")
-        if not report["observations"]:
-            return 2
-        if args.fail_on and any(SEVERITIES[f["severity"]] >= SEVERITIES[args.fail_on] for f in report["findings"]):
-            return 1
-        return 0
+        result = run_analysis(AnalysisRequest(source=args.input, output=args.output, name=args.name,
+                                             scope=args.scope, baseline=args.baseline,
+                                             fail_on=args.fail_on, format=args.format))
+        print(format_analysis_summary(result))
+        return result.exit_code
     except (OSError, ValueError, RecursionError) as exc:
         print(f"scopelens: {redact(exc)}", file=sys.stderr)
         return 2

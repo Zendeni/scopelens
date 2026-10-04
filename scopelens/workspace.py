@@ -9,9 +9,11 @@ from pathlib import Path
 import secrets
 
 from .engine import validate_report, validate_scope
-from .inputs import is_link, load_input
+from .inputs import load_input
 from .model import redact
 from .parsers import parse_documents
+from .service import AnalysisRequest, format_analysis_summary, run_analysis
+from .storage import MAX_SCOPE_BYTES, new_directory, no_links as _no_links, read_json, regular_file as _regular
 
 MAX_REPORT_ENTRIES = 1000
 MAX_REPORT_BYTES = 64 * 1024 * 1024
@@ -21,27 +23,12 @@ HELPERS = {
 }
 
 
-def _no_links(path: Path) -> None:
-    for part in (*reversed(path.parents), path):
-        if os.path.lexists(part) and is_link(part):
-            raise ValueError(f"Links are not allowed for workspace files: {part}")
-
-
 def _workspace(path: Path) -> Path:
     path = path.expanduser().absolute()
     _no_links(path)
     if not path.is_dir():
         raise ValueError(f"Expected an existing workspace directory: {path}")
     return path
-
-
-def _regular(path: Path, *, missing: bool = False) -> bool:
-    _no_links(path)
-    if not path.exists() and missing:
-        return False
-    if not path.is_file():
-        raise ValueError(f"Expected a regular file: {path}")
-    return True
 
 
 def _target_metadata(workspace: Path) -> tuple[list[dict], list[dict]]:
@@ -64,14 +51,12 @@ def _helper(command: str) -> str:
 
 def prepare(path: Path, name: str = "", targets: list[str] | None = None) -> dict:
     """Create missing bridge files only. Validate before writing anything."""
-    from .cli import read_json
-
     workspace = _workspace(path)
     managed = ["scope.json", "ANALYSIS.md", *HELPERS]
     present = {filename: _regular(workspace / filename, missing=True) for filename in managed}
     metadata, warnings = _target_metadata(workspace)
     if present["scope.json"]:
-        scope = validate_scope(read_json(workspace / "scope.json", 1024 * 1024))
+        scope = validate_scope(read_json(workspace / "scope.json", MAX_SCOPE_BYTES))
         if targets:
             warnings.append({"code": "scope_preserved", "message": "Existing scope.json takes precedence over --target; edit it explicitly to change scope."})
     else:
@@ -128,8 +113,6 @@ def prepare(path: Path, name: str = "", targets: list[str] | None = None) -> dic
 
 def report_inventory(workspace: Path) -> tuple[list[dict], list[dict]]:
     """List direct report snapshots with bounded reads and no link traversal."""
-    from .cli import read_json
-
     root = workspace / "reports"
     _no_links(root)
     if not root.exists():
@@ -189,14 +172,12 @@ def report_inventory(workspace: Path) -> tuple[list[dict], list[dict]]:
 def review(path: Path, *, output: Path | None = None, scope: Path | None = None,
            name: str = "", baseline: str | None = None, fail_on: str | None = None,
            format: str = "all") -> int:
-    from .cli import main, read_json
-
     workspace = _workspace(path)
     scope = (scope or workspace / "scope.json").expanduser().absolute()
     if not os.path.lexists(scope):
         raise ValueError(f"Scope file is missing: {scope}. Run scopelens prepare PATH --target HOST first, or pass --scope FILE.")
     _regular(scope)
-    validate_scope(read_json(scope, 1024 * 1024))
+    validate_scope(read_json(scope, MAX_SCOPE_BYTES))
     if baseline == "latest":
         reports, warnings = report_inventory(workspace)
         if any(item["code"] in {"report_limit", "report_byte_limit"} for item in warnings):
@@ -212,30 +193,24 @@ def review(path: Path, *, output: Path | None = None, scope: Path | None = None,
         _no_links(root)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
         output = root / f"{stamp}-{secrets.token_hex(3)}"
-    output = output.expanduser().absolute()
-    _no_links(output)
-    if output.exists():
-        raise ValueError(f"Output already exists; choose a new directory: {output}")
+    output = new_directory(output)
     metadata, _ = _target_metadata(workspace)
     title = name or next((item["name"] for item in metadata if item.get("name")), workspace.name)
-    argv = ["analyze", str(workspace), "--output", str(output), "--scope", str(scope), "--name", title, "--format", format]
     if baseline:
-        argv.extend(["--baseline", str(Path(baseline).expanduser().absolute())])
         print(f"Baseline: {baseline}")
-    if fail_on:
-        argv.extend(["--fail-on", fail_on])
-    result = main(argv)
+    result = run_analysis(AnalysisRequest(source=workspace, output=output, scope=scope,
+                                         name=title, format=format, fail_on=fail_on,
+                                         baseline=Path(baseline) if baseline else None))
+    print(format_analysis_summary(result))
     for filename in ("report.html", "report.json", "report.md"):
         report_path = output / filename
         if report_path.is_file():
             print(f"Open report: {report_path}")
             break
-    return result
+    return result.exit_code
 
 
 def inspect(path: Path) -> dict:
-    from .cli import read_json
-
     workspace = _workspace(path)
     documents, coverage, diagnostics = load_input(workspace)
     target_documents = [doc for doc in documents if doc.path == ".target.env"]
@@ -245,7 +220,7 @@ def inspect(path: Path) -> dict:
     scope = {"path": str(scope_path), "status": "missing", "value": None}
     try:
         if _regular(scope_path, missing=True):
-            scope.update(status="valid", value=validate_scope(read_json(scope_path, 1024 * 1024)))
+            scope.update(status="valid", value=validate_scope(read_json(scope_path, MAX_SCOPE_BYTES)))
         else:
             diagnostics.append({"code": "scope_missing", "message": "Run scopelens prepare PATH --target HOST before review."})
     except (OSError, ValueError, RecursionError) as exc:

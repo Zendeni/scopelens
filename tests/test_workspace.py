@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from scopelens.cli import main
 from scopelens.inputs import load_input
+from scopelens.workspace import review
 
 
 class WorkspaceTests(unittest.TestCase):
@@ -93,6 +94,25 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("prepare", err)
         self.assertEqual(before, self.snapshot())
+
+    def test_review_does_not_reenter_cli_or_parse_arguments(self):
+        self.assertEqual(self.run_cli("prepare", self.workspace)[0], 0)
+        with patch("scopelens.cli.main", side_effect=AssertionError("recursive CLI call")), \
+                patch("argparse.ArgumentParser.parse_args", side_effect=AssertionError("recursive argument parsing")), \
+                contextlib.redirect_stdout(io.StringIO()):
+            code = review(self.workspace, format="json", fail_on="medium")
+        self.assertEqual(code, 1)
+        self.assertEqual(len(list((self.workspace / "reports").glob("*/report.json"))), 1)
+
+    def test_analyze_and_review_share_severity_threshold_semantics(self):
+        self.assertEqual(self.run_cli("prepare", self.workspace)[0], 0)
+        for severity, expected in (("medium", 1), ("critical", 0)):
+            with self.subTest(severity=severity):
+                direct = self.run_cli("analyze", self.workspace, "--scope", self.workspace / "scope.json",
+                                      "-o", self.root / severity, "--fail-on", severity, "--format", "json")
+                reviewed = self.run_cli("review", self.workspace, "--fail-on", severity, "--format", "json")
+                self.assertEqual(direct[0], expected, direct[2])
+                self.assertEqual(reviewed[0], expected, reviewed[2])
 
     def test_review_unique_snapshots_baseline_and_threshold_exit(self):
         self.assertEqual(self.run_cli("prepare", self.workspace)[0], 0)

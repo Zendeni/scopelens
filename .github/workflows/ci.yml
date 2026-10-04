@@ -27,5 +27,5 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Installation diagnostics
         run: scopelens doctor
-      - name: Analyze synthetic demo
-        run: scopelens analyze examples/demo -o ci-report --scope examples/scope.json
+      - name: Analyze synthetic demo with installed package
+        run: python -I -m scopelens analyze examples/demo -o ci-report --scope examples/scope.json

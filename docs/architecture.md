@@ -34,6 +34,29 @@ The stages have different responsibilities:
 5. **Rules** evaluate the observations for defensive review. A rule must have relevant evidence and explain the concern and remediation. An open port alone cannot establish a missing authentication control or a specific CVE.
 6. **Reporting** renders the resulting data. The JSON format serves as the integration and baseline format; the other outputs are human views of the analysis.
 
+## Code map
+
+| Module | Responsibility |
+| --- | --- |
+| `cli.py` | Argument parsing, command dispatch, and user-facing status |
+| `workspace.py` | Preparation, report history, inspection, and review defaults |
+| `service.py` | Shared analysis request/result API, output formats, and threshold status |
+| `storage.py` | Bounded JSON reads, path checks, and exclusive report publication |
+| `inputs.py`, `parsers.py` | Bounded artifact loading and format recognition |
+| `engine.py` | Compose import, normalization, scope, rules, and report data |
+| `scope.py` | Normalize and match explicit host identifiers and networks |
+| `evidence.py` | Sanitize and deduplicate exported observations |
+| `rules.py` | Defensive rule catalog and finding generation |
+| `comparison.py` | Validate saved snapshots and compare their evidence |
+| `reporting/` | HTML and Markdown renderers, shared escaping, packaged CSS and JavaScript |
+| `reports.py` | Stable public renderer imports and JSON serialization |
+
+CLI analysis and workspace review both call `service.run_analysis`; workspace code does not import the CLI or reconstruct command arguments. The service returns an `AnalysisResult` without printing. It raises validation and filesystem errors; the CLI translates those errors into its documented status codes. Scope, rules, evidence, and comparison helpers remain available through their earlier `engine` imports.
+
+Report assets are loaded through `importlib.resources` and embedded into the generated HTML. They ship in the installed package; reports do not depend on the source checkout, a local server, or external styles and scripts. Format-specific rendering is separate from the application workflow.
+
+Publication validates paths and stages complete text before claiming a new destination directory. Existing directories and files are never replaced. A publication failure can leave partial output for inspection; callers must choose another destination when retrying. Temporary staging cleanup does not mask the original error. These checks are safeguards for local files, not a filesystem sandbox against another process actively replacing directories.
+
 ## Observation and evidence model
 
 An observation records a kind, asset, structured data, confidence, stable identity, and evidence references. Evidence includes the relative artifact path, a SHA-256 digest of the artifact content, a source line where available, a structured locator where useful, and a sanitized excerpt.

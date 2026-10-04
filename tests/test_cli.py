@@ -93,6 +93,16 @@ class WorkflowTests(unittest.TestCase):
         self.assertFalse(output.exists())
         self.assertEqual(self.run_cli("analyze", self.root / "missing", "-o", output)[0], 2)
 
+    def test_service_errors_and_interruptions_keep_public_exit_codes(self):
+        for error, expected, message in ((OSError("write failed"), 2, "write failed"),
+                                         (ValueError("invalid report"), 2, "invalid report"),
+                                         (KeyboardInterrupt(), 130, "interrupted")):
+            with self.subTest(expected=expected, message=message), \
+                    patch("scopelens.cli.run_analysis", side_effect=error):
+                code, _, err = self.run_cli("analyze", self.source, "-o", self.root / "report")
+            self.assertEqual(code, expected)
+            self.assertIn(message, err)
+
 
 if __name__ == "__main__":
     unittest.main()

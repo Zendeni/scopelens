@@ -4,7 +4,12 @@ from __future__ import annotations
 import copy
 from html.parser import HTMLParser
 import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
+import zipfile
 
 from scopelens.reports import render_html, render_json, render_markdown
 
@@ -50,6 +55,29 @@ def report_fixture() -> dict:
 
 
 class ReportTests(unittest.TestCase):
+    def test_dashboard_assets_load_when_package_is_imported_from_an_archive(self):
+        # Exercise importlib.resources with a non-filesystem package and an
+        # unrelated working directory, as used by portable Python deployments.
+        package = Path(__file__).resolve().parents[1] / "scopelens"
+        with tempfile.TemporaryDirectory(prefix="scopelens reports ") as temporary:
+            archive = Path(temporary) / "application.zip"
+            with zipfile.ZipFile(archive, "w") as bundle:
+                for path in package.rglob("*"):
+                    if path.is_file() and "__pycache__" not in path.parts:
+                        bundle.write(path, path.relative_to(package.parent).as_posix())
+            command = (
+                "import sys; sys.path.insert(0, sys.argv[1]); "
+                "from scopelens.reports import render_html; "
+                "sys.stdout.write(render_html({}))"
+            )
+            result = subprocess.run(
+                [sys.executable, "-I", "-X", "utf8", "-c", command, str(archive)],
+                cwd=temporary, capture_output=True, text=True, encoding="utf-8",
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, render_html({}))
+
     def test_json_round_trips_full_contract_without_mutation(self):
         report = report_fixture()
         original = copy.deepcopy(report)

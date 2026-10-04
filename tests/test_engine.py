@@ -50,7 +50,8 @@ class EngineTests(unittest.TestCase):
     def test_scope_invalid_shapes_and_entries_are_rejected(self):
         for scope in ([], {"include": "example.test"}, {"include": [None]},
                       {"include": ["*.example.test"]}, {"include": ["https://example.test"]},
-                      {"include": ["bad..example.test"]}, {"unknown": []}):
+                      {"include": ["bad..example.test"]}, {"include": ["example.test.."]},
+                      {"include": ["192.0.2.10.."]}, {"unknown": []}):
             with self.subTest(scope=scope), self.assertRaises(ValueError):
                 validate_scope(scope)
 
@@ -214,6 +215,25 @@ class EngineTests(unittest.TestCase):
         for key, value in delta.items():
             if key != "note":
                 self.assertEqual(value, [], key)
+
+    def test_diff_with_conflicting_service_evidence_is_independent_of_row_order(self):
+        before = self.report(self.nmap(
+            "Nmap scan report for 192.0.2.10\n22/tcp open ssh OpenSSH 9.8\n",
+            "before.txt"))
+        after = self.report(self.nmap(
+            "Nmap scan report for 192.0.2.10\n22/tcp open ssh OpenSSH 9.9\n"
+            "22/tcp open ssh OpenSSH 9.10\n21/tcp open ftp ExampleFTP 1.0\n"
+            "21/tcp open ftp ExampleFTP 2.0\n", "after.txt"))
+        reordered = copy.deepcopy(after)
+        reordered["observations"].reverse()
+        reordered["findings"].reverse()
+        original_rows = copy.deepcopy(reordered["observations"])
+        self.assertEqual(compare_reports(before, after), compare_reports(before, reordered))
+        self.assertEqual(compare_reports(after, before), compare_reports(reordered, before))
+        self.assertEqual(reordered["observations"], original_rows)
+        changed = compare_reports(before, after)["changed_services"]
+        self.assertEqual(len(changed), 1)
+        self.assertEqual(len(changed[0]["after"]), 2)
 
     def test_diff_redacts_baseline_records_without_mutating_the_baseline(self):
         before = self.sample_report()
