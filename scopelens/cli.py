@@ -81,6 +81,21 @@ def parser() -> argparse.ArgumentParser:
     initialize.add_argument("path", type=Path)
     initialize.add_argument("--name", required=True)
     initialize.add_argument("--target", action="append", default=[], help="Exact host, IP, or CIDR; repeat as needed")
+    prepare = commands.add_parser("prepare", help="Add ScopeLens helpers to an existing workspace, preserving files")
+    prepare.add_argument("path", type=Path)
+    prepare.add_argument("--name", default="", help="Assessment name")
+    prepare.add_argument("--target", action="append", default=[], help="Exact host, IP, or CIDR; repeat to override inferred targets for a new scope")
+    review = commands.add_parser("review", help="Review a prepared workspace into a new offline report snapshot")
+    review.add_argument("path", type=Path)
+    review.add_argument("-o", "--output", type=Path, help="New report directory; defaults to a unique snapshot in PATH/reports/")
+    review.add_argument("--scope", type=Path, help="Scope JSON; defaults to PATH/scope.json (required)")
+    review.add_argument("--name", default="", help="Assessment name")
+    review.add_argument("--baseline", help="Prior report.json or 'latest' for the newest valid workspace snapshot")
+    review.add_argument("--fail-on", choices=SEVERITIES)
+    review.add_argument("--format", choices=("all", "json", "html", "markdown"), default="all")
+    inspect = commands.add_parser("inspect", help="Read workspace targets, scope, artifact counts, and prior reports")
+    inspect.add_argument("path", type=Path)
+    inspect.add_argument("--json", action="store_true", help="Machine-readable inventory")
     commands.add_parser("doctor", help="Show runtime and offline capabilities")
     commands.add_parser("rules", help="List the review rules and their assumptions")
     diff = commands.add_parser("diff", help="Compare two ScopeLens JSON reports")
@@ -93,6 +108,29 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
+        if args.command in {"prepare", "review", "inspect"}:
+            from . import workspace
+            if args.command == "prepare":
+                result = workspace.prepare(args.path, args.name, args.target)
+                print(f"Workspace prepared: {result['workspace']}")
+                print("Created: " + (", ".join(result["created"]) or "none"))
+                print("Preserved: " + (", ".join(result["preserved"]) or "none"))
+                for filename in result["different_helpers"]:
+                    print(f"Preserved customized helper: {filename}. Use scopelens review PATH or scopelens inspect PATH directly if needed.")
+                for diagnostic in result["diagnostics"]:
+                    print(f"  {diagnostic['code']}: {diagnostic['message']}")
+                print("Next: scopelens inspect PATH, then scopelens review PATH")
+                return 0
+            if args.command == "review":
+                return workspace.review(args.path, output=args.output, scope=args.scope,
+                                        name=args.name, baseline=args.baseline,
+                                        fail_on=args.fail_on, format=args.format)
+            result = workspace.inspect(args.path)
+            if args.json:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+            else:
+                workspace.print_inspection(result)
+            return 2 if result["scope"]["status"] == "invalid" else 0
         if args.command == "doctor":
             print(f"ScopeLens {__version__}\nPython {platform.python_version()} | {platform.system()}\nRuntime dependencies: standard library only\nNetwork access: none\nExecution of imported scripts: none\nInputs: directory, ZIP, Nmap XML/text, httpx, ffuf, HTTP headers, package inventories\nOutputs: JSON, Markdown, standalone HTML")
             return 0

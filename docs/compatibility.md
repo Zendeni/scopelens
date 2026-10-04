@@ -27,7 +27,42 @@ The input reader tolerates other workspace files. Being present in the input doe
 
 `.target.env` supplies workspace context as plain text. Its contents are not shell-evaluated. ScopeLens does not require Bash, Kali Linux, a hardcoded workspace root, or a modified hosts file.
 
-The htb-init ZIP helper writes a flat archive containing `.target.env`, `scans/`, `enum/`, and supporting files. ScopeLens also accepts an archive containing a workspace directory. The original ZIP helper excludes `loot/`, screenshots, packet captures, and nested archives. Their absence in an archive must not be read as evidence that no such material exists.
+### Shared workspace commands in 0.2.0
+
+The updated htb-init initializer creates workspaces under `$HOME/htb_labs/<box>` by default, with an optional `HTB_LABS_ROOT` override. If ScopeLens 0.2.0 or newer is installed, it prepares the workspace for offline review automatically. Older workspaces can be prepared directly:
+
+```console
+scopelens prepare /path/to/workspace
+scopelens inspect /path/to/workspace
+scopelens review /path/to/workspace
+```
+
+These commands accept an existing workspace directory. `prepare` creates only missing integration files:
+
+| File | Contract |
+| --- | --- |
+| `scope.json` | Initial include entries from literal `IP` and `HOST` values in `.target.env`; existing scope is preserved |
+| `analyze.sh` | Calls the installed ScopeLens package to review its own workspace; accepts review options |
+| `inspect.sh` | Calls the installed ScopeLens package to inspect its own workspace; accepts `--json` |
+| `ANALYSIS.md` | Local instructions for scope, inspection, review, and comparisons |
+
+Preparation preserves existing helper files and custom content. If neither a scope file nor usable target metadata exists, supply `--target` entries explicitly. It does not run imported scripts or collect evidence. The Bash helpers use isolated Python execution so that a Python module placed in an evidence directory is not used as the analyzer. Install ScopeLens into the active Python environment; merely placing its checkout next to the workspace is not sufficient for those helpers. They use `python3` unless the `HTB_PYTHON` environment variable selects another executable.
+
+`review` requires a scope file and automatically uses the workspace's `scope.json` unless `--scope` supplies another file. Review the scope after preparation, including aliases used in your evidence. Every run chooses a fresh `reports/<timestamp>-<unique-suffix>/` directory and saves all three report formats by default. `--output` selects an explicit new output directory; `--format` selects one format; `--fail-on` sets a finding severity threshold using the same exit codes as `analyze`.
+
+```console
+scopelens review /path/to/workspace --baseline latest
+scopelens review /path/to/workspace --baseline /path/to/earlier/report.json
+scopelens inspect /path/to/workspace --json
+```
+
+`--baseline latest` selects the latest valid saved ScopeLens JSON report by its generation time. It errors when no eligible baseline exists. A run containing only HTML or Markdown is not a JSON baseline. Comparison describes changes in the supplied artifacts and does not independently confirm remediation.
+
+`inspect` is read-only: it reports workspace metadata, scope status, file loading coverage, saved report summaries, and diagnostics. A loaded file is readable but may not have a supported parser; use a review report to inspect parsing coverage. JSON inspection output includes `workspace`, `targets`, `scope`, `artifact_counts`, `artifacts`, `reports`, and `diagnostics`. It does not create a new report snapshot.
+
+The original `analyze` command remains available for directories, ZIPs, and individual supported artifacts, with an explicit new output directory. It uses scope only when `--scope` is supplied; it does not automatically adopt the prepared workspace's scope file.
+
+The htb-init ZIP helper writes a flat archive containing `.target.env`, `scans/`, `enum/`, and supporting files. ScopeLens also accepts an archive containing a workspace directory. The original ZIP helper excludes `loot/`, screenshots, packet captures, and nested archives. Their absence in an archive must not be read as evidence that no such material exists. Raw archives preserve original evidence and may include sensitive material; report redaction does not alter them. Review snapshots under `reports/` are stored separately and are not automatically included in those archives.
 
 ## Supported formats
 

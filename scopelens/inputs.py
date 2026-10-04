@@ -23,7 +23,8 @@ class Limits:
 SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", "loot",
              "exploits", "shells", "screenshots", "scopelens-report", "reports"}
 SKIP_NAMES = {"report.json", "report.html", "report.md", "recon-analysis.md",
-              "notes.md", "writeup.md", "recon-console.log"}
+              "notes.md", "writeup.md", "recon-console.log", "scope.json",
+              "assessment.json", "analysis.md"}
 SUFFIXES = {".xml", ".txt", ".nmap", ".gnmap", ".json", ".jsonl", ".ndjson", ".md", ".headers", ".log"}
 
 

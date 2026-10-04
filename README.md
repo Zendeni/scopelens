@@ -4,7 +4,7 @@
 
 ScopeLens is an offline analysis tool for existing recon workspaces, ZIP archives, and individual supported artifacts. It imports evidence, organizes assets and services, identifies defensive configuration concerns, and produces reports you can inspect or compare over time. It works with the workspace layout created by [htb-init](https://github.com/Zendeni/htb-init) and also accepts supported artifacts in other directory layouts.
 
-Python 3.10+ · Linux, macOS, Windows · No runtime dependencies · No network requests
+ScopeLens 0.2.0 · Python 3.10+ · Linux, macOS, Windows · No runtime dependencies · No network requests
 
 ## Try it
 
@@ -41,14 +41,60 @@ Use a **new output directory for every run**. ScopeLens refuses to overwrite an 
 
 ScopeLens analyzes files already collected. It does not run scanners, execute imported scripts, contact targets, authenticate to services, select exploits, or infer CVEs from a port number. A service banner or configuration observation is not a confirmed vulnerability. Its findings are prompts for defensive review, not guarantees about the security of a system.
 
-## Analyze an existing workspace
+## Prepare, inspect, and review a workspace
+
+ScopeLens and [htb-init](https://github.com/Zendeni/htb-init) share one reporting workflow. With ScopeLens installed, prepare an existing workspace once:
+
+```console
+scopelens prepare /path/to/htb-workspace
+scopelens inspect /path/to/htb-workspace
+scopelens review /path/to/htb-workspace
+```
+
+`prepare` creates missing `scope.json`, `analyze.sh`, `inspect.sh`, and `ANALYSIS.md` files, preserving existing files and user scope. Initial scope entries come from literal `IP` and `HOST` metadata in `.target.env`; that file is read as text and never executed. If neither scope nor usable target metadata exists, supply `--target 192.0.2.10` and repeat `--target` for additional names or addresses. Review the generated scope before relying on it.
+
+`inspect` reads file loading coverage and saved report information without creating a report. A loaded artifact is readable, not necessarily parsed or understood; check the review report for parser coverage. Add `--json` for machine-readable output.
+
+`review` requires a scope file and defaults to the workspace's `scope.json`. It saves a fresh snapshot under `reports/` by default. Run `prepare` first if scope is missing, or supply another file with `--scope`. Open the printed `report.html` path to search findings and inspect their evidence. The default output also includes `report.json` and `report.md`. Choose `--format json`, `--format html`, or `--format markdown` when only one format is needed. Use `-o /path/to/new-review` to choose the output directory explicitly.
+
+The generated helpers work from any current directory and require Bash and the installed package:
+
+```bash
+cd /path/to/htb-workspace
+./inspect.sh
+./analyze.sh
+./analyze.sh --baseline latest
+```
+
+They use `python3` from your active environment. Set `HTB_PYTHON` to another Python executable when needed.
+
+`--baseline latest` compares against the latest eligible JSON report saved in the workspace. It fails if no earlier report is available; create your first review without that option. An explicit `--baseline /path/to/report.json` is also supported. Runs that save only HTML or Markdown cannot serve as JSON baselines.
+
+### Install alongside htb-init
+
+Use sibling checkouts and one virtual environment on Linux or macOS:
+
+```bash
+git clone https://github.com/Zendeni/htb-init.git
+git clone https://github.com/Zendeni/scopelens.git
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install ./scopelens
+bash htb-init/htb-init.sh example 192.0.2.10
+```
+
+The updated initializer defaults to `$HOME/htb_labs/example` and prepares analysis helpers automatically when ScopeLens 0.2.0 or newer is installed. Use `HTB_LABS_ROOT` to choose another workspace root. Initialization creates files without running the generated collection scripts. For older workspaces, use `scopelens prepare` to add the same review workflow. Reactivate the shared environment in each new terminal.
+
+Windows users can run ScopeLens commands directly with Python 3.10 or newer; the htb-init initializer and shell helpers require a Bash environment.
+
+## Analyze an archive or choose explicit paths
 
 ```console
 scopelens analyze /path/to/htb-workspace -o review-001 --name "Internal review"
 scopelens analyze /path/to/recon.zip -o review-002 --scope examples/scope.json
 ```
 
-The input may be a directory, ZIP archive, or individual supported file. Both a flat archive and an archive containing a workspace directory are supported. `.target.env` is read as text; it is never sourced as a shell script.
+The `analyze` input may be a directory, ZIP archive, or individual supported file. Both a flat archive and an archive containing a workspace directory are supported. `.target.env` is read as text; it is never sourced as a shell script. Unlike `review`, `analyze` uses a scope file only when supplied explicitly with `--scope` and requires a new output directory.
 
 The original htb-init exports can be used directly. See [format compatibility](docs/compatibility.md) for supported inputs and limits.
 
@@ -71,6 +117,14 @@ The service total counts unique asset/protocol/port combinations. The inventory 
 
 ### Compare snapshots
 
+For a prepared workspace, compare a new review against its last saved JSON report:
+
+```console
+scopelens review /path/to/htb-workspace --baseline latest
+```
+
+To select the output and baseline paths explicitly, or compare two existing reports:
+
 ```console
 scopelens analyze /path/to/new-workspace -o review-003 --baseline review-001/report.json
 scopelens diff review-001/report.json review-003/report.json -o changes.json
@@ -83,6 +137,7 @@ A difference describes service and finding changes in the two reports. A removed
 ```console
 scopelens analyze examples/demo -o json-review --format json
 scopelens analyze examples/demo -o threshold-review --fail-on medium
+scopelens review /path/to/htb-workspace --fail-on medium
 ```
 
 `--format` accepts `all`, `json`, `html`, or `markdown`. `--fail-on` accepts `info`, `low`, `medium`, `high`, or `critical`; it returns a nonzero status when a finding reaches the selected threshold. Findings use the local rule set rather than a CVSS calculation or online vulnerability database.
@@ -102,7 +157,7 @@ Import warnings alone do not force a failure when usable observations remain. In
 scopelens init my-review --name "My review" --target 192.0.2.10 --target portal.example.test
 ```
 
-This prepares a local workspace for artifacts. It does not collect data. Copy supported results into `my-review/evidence/`, then run `scopelens analyze my-review/evidence -o my-review/reports/review-001 --scope my-review/scope.json`. The scope file is used only when supplied with `--scope`.
+This creates a new local workspace for artifacts. It does not collect data. Copy supported results into `my-review/evidence/`, then run `scopelens review my-review` to use its scope and create a report snapshot. Use `scopelens prepare my-review` if you also want the Bash helpers and local analysis instructions. `init` requires a new destination; `prepare` adds missing integration files to an existing directory.
 
 ### Inspect the installation and rules
 
@@ -111,6 +166,9 @@ scopelens doctor
 scopelens rules
 scopelens --help
 scopelens analyze --help
+scopelens prepare --help
+scopelens review --help
+scopelens inspect --help
 ```
 
 ## From htb-init to ScopeLens
@@ -127,6 +185,8 @@ The earlier analyzer provided a useful starting point: import a workspace, extra
 | Repeated reviews required manual comparison | Stable observation identities and snapshot comparison |
 
 Redaction is best effort. Paths, hostnames, package names, and other assessment context may still be sensitive. Review reports before sharing them.
+
+Raw htb-init archives preserve the original collected material and may contain secrets. The `reports/` snapshots are separate, excluded from evidence imports, and not automatically included in those archives. For the earlier htb-init workflow, see its [legacy documentation](https://github.com/Zendeni/htb-init/blob/main/docs/legacy-workflow.md).
 
 ## Development
 
