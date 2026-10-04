@@ -4,4 +4,3 @@ Content-Type: text/html; charset=utf-8
 Server: example-web
 X-Content-Type-Options: nosniff
 Set-Cookie: theme=synthetic-preference; Path=/; SameSite=Lax
-
