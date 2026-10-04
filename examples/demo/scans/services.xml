@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nmaprun scanner="nmap" start="1791072000" version="7.95" xmloutputversion="1.05">
+  <scaninfo type="connect" protocol="tcp" numservices="8" services="21,22,53,80,443,445,3389,5985"/>
+  <scaninfo type="udp" protocol="udp" numservices="1" services="53"/>
+  <host starttime="1791072000" endtime="1791072005">
+    <status state="up" reason="user-set"/>
+    <address addr="192.0.2.10" addrtype="ipv4"/>
+    <hostnames><hostname name="portal.example.test" type="user"/></hostnames>
+    <ports>
+      <port protocol="tcp" portid="22"><state state="open" reason="syn-ack"/><service name="ssh" product="OpenSSH" version="9.9" method="probed" conf="10"/></port>
+      <port protocol="tcp" portid="53"><state state="open" reason="syn-ack"/><service name="domain" product="ISC BIND" method="probed" conf="10"/></port>
+      <port protocol="udp" portid="53"><state state="open" reason="udp-response"/><service name="domain" product="ISC BIND" method="probed" conf="10"/></port>
+      <port protocol="tcp" portid="80"><state state="open" reason="syn-ack"/><service name="http" product="nginx" version="1.26.3" method="probed" conf="10"/></port>
+      <port protocol="tcp" portid="443"><state state="open" reason="syn-ack"/><service name="https" product="nginx" version="1.26.3" tunnel="ssl" method="probed" conf="10"/></port>
+    </ports>
+  </host>
+  <host starttime="1791072000" endtime="1791072005">
+    <status state="up" reason="user-set"/>
+    <address addr="192.0.2.20" addrtype="ipv4"/>
+    <hostnames><hostname name="files.example.test" type="user"/></hostnames>
+    <ports>
+      <port protocol="tcp" portid="21"><state state="open" reason="syn-ack"/><service name="ftp" product="Example FTP service" method="probed" conf="10"/></port>
+      <port protocol="tcp" portid="445"><state state="open" reason="syn-ack"/><service name="microsoft-ds" method="probed" conf="10"/></port>
+      <port protocol="tcp" portid="3389"><state state="open" reason="syn-ack"/><service name="ms-wbt-server" method="probed" conf="10"/></port>
+      <port protocol="tcp" portid="5985"><state state="open" reason="syn-ack"/><service name="http" product="Microsoft HTTPAPI httpd" version="2.0" method="probed" conf="10"/></port>
+    </ports>
+  </host>
+  <runstats><finished time="1791072005" elapsed="5.00" summary="Synthetic documentation dataset" exit="success"/><hosts up="2" down="0" total="2"/></runstats>
+</nmaprun>

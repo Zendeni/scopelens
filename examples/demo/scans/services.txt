@@ -1,0 +1,20 @@
+# Synthetic scanner output for ScopeLens documentation.
+# This is sample data and was not collected from a live environment.
+Nmap scan report for portal.example.test (192.0.2.10)
+Host is up.
+PORT     STATE SERVICE VERSION
+22/tcp   open  ssh     OpenSSH 9.9
+53/tcp   open  domain  ISC BIND
+53/udp   open  domain  ISC BIND
+80/tcp   open  http    nginx 1.26.3
+443/tcp  open  https   nginx 1.26.3
+
+Nmap scan report for files.example.test (192.0.2.20)
+Host is up.
+PORT     STATE SERVICE       VERSION
+21/tcp   open  ftp           Example FTP service
+445/tcp  open  microsoft-ds
+3389/tcp open  ms-wbt-server
+5985/tcp open  http          Microsoft HTTPAPI httpd 2.0
+
+Nmap done: 2 IP addresses (2 hosts up) scanned in 5.00 seconds

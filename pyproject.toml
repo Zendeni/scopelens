@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scopelens"
+version = "0.1.0"
+description = "Offline, evidence-first analysis of security assessment artifacts"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{name = "Zendeni"}]
+dependencies = []
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Topic :: Security",
+]
+
+[project.scripts]
+scopelens = "scopelens.cli:main"
+
+[project.urls]
+Repository = "https://github.com/Zendeni/scopelens"
+
+[tool.setuptools.packages.find]
+include = ["scopelens*"]

@@ -1,0 +1,10 @@
+{
+  "include": [
+    "192.0.2.0/24",
+    "portal.example.test",
+    "files.example.test"
+  ],
+  "exclude": [
+    "192.0.2.99"
+  ]
+}
